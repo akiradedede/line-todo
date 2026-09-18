@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>やること</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --fg:#1d1f23; --sub:#8a9099;
+    --line:#e5e7eb; --accent:#06c755; --warn:#b07d00; --danger:#e0655c;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#15171a; --card:#1f2227; --fg:#e8eaed; --sub:#8b919a;
+           --line:#2e3238; --accent:#06c755; --warn:#d8a52a; }
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    font-size:15px; line-height:1.6;
+    padding:16px 16px calc(24px + env(safe-area-inset-bottom));
+    max-width:640px; margin-inline:auto;
+  }
+  header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  h1{ font-size:19px; margin:0; letter-spacing:.01em; }
+  .date{ font-size:12px; color:var(--sub); }
+
+  .card{ background:var(--card); border-radius:var(--radius); padding:6px 14px; margin-bottom:14px;
+         box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .card.pad{ padding:14px; }
+  h2{ font-size:12px; color:var(--sub); font-weight:600; margin:18px 4px 8px;
+      letter-spacing:.06em; text-transform:none; }
+
+  .item{ display:flex; align-items:center; gap:12px; padding:13px 2px;
+         border-bottom:1px solid var(--line); cursor:pointer; }
+  .item:last-child{ border-bottom:none; }
+  .item.plain{ cursor:default; }
+  .box{ width:22px; height:22px; flex:0 0 22px; border:2px solid var(--line);
+        border-radius:7px; display:grid; place-items:center; transition:.15s; }
+  .item.done .box{ background:var(--accent); border-color:var(--accent); }
+  .box svg{ width:13px; height:13px; stroke:#fff; stroke-width:3.2;
+            fill:none; opacity:0; transition:.15s; }
+  .item.done .box svg{ opacity:1; }
+  .t{ flex:1; min-width:0; }
+  .item.done .t{ color:var(--sub); text-decoration:line-through; }
+  .tag{ font-size:11px; color:var(--sub); border:1px solid var(--line);
+        border-radius:5px; padding:1px 6px; flex:0 0 auto; }
+  .carry{ font-size:11px; color:var(--warn); flex:0 0 auto; }
+
+  .empty{ color:var(--sub); font-size:13px; padding:20px 4px; text-align:center; }
+
+  .bar{ height:5px; background:var(--line); border-radius:3px; overflow:hidden; margin:2px 0 12px; }
+  .bar i{ display:block; height:100%; background:var(--accent); width:0; transition:.3s; }
+  .stats{ display:flex; gap:20px; font-size:13px; color:var(--sub); }
+  .stats b{ color:var(--fg); font-size:17px; font-weight:650; margin-right:2px; }
+
+  form{ display:flex; flex-direction:column; gap:10px; }
+  .row{ display:flex; gap:8px; }
+  input[type=text], select{
+    font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; padding:11px 12px; width:100%; appearance:none;
+  }
+  input[type=text]:focus, select:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+  button{ font:inherit; font-weight:600; border:none; border-radius:10px;
+          background:var(--accent); color:#fff; padding:11px 18px; cursor:pointer; }
+  button:disabled{ opacity:.45; }
+  .del{ background:none; color:var(--danger); font-size:12px; font-weight:500; padding:4px 6px; }
+
+  #msg{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px;
+        background:#22262c; color:#fff; font-size:13px; padding:9px 16px;
+        border-radius:20px; opacity:0; pointer-events:none; transition:.2s; }
+  #msg.on{ opacity:.95; }
+  .err{ background:var(--card); border-radius:var(--radius); padding:18px;
+        font-size:13px; color:var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- ▼▼ ここ 2 行を自分の値に書き換えてください ▼▼ -->
+<script>
+  const LIFF_ID = '0000000000-xxxxxxxx';
+  const GAS_URL = 'https://script.google.com/macros/s/xxxxxxxxxxxxxxxxxxxx/exec';
+</script>
+<!-- ▲▲ ここまで ▲▲ -->
+
+<div id="app" hidden>
+  <header>
+    <h1>やること</h1>
+    <span class="date" id="date"></span>
+  </header>
+
+  <div class="card pad">
+    <div class="bar"><i id="barfill"></i></div>
+    <div class="stats">
+      <span><b id="sDone">0</b>/<span id="sAll">0</span> 今日</span>
+      <span><b id="sStreak">0</b>日 連続</span>
+      <span><b id="sWeek">0</b>件 今週</span>
+    </div>
+  </div>
+
+  <div class="card" id="list"></div>
+
+  <h2 id="hInfo" hidden>予定</h2>
+  <div class="card" id="info" hidden></div>
+
+  <h2>追加する</h2>
+  <div class="card pad">
+    <form id="add">
+      <input type="text" id="title" placeholder="やること" autocomplete="off" required>
+      <div class="row">
+        <select id="type">
+          <option value="once">1回だけ</option>
+          <option value="daily">毎日</option>
+          <option value="weekday">平日</option>
+          <option value="weekly">毎週</option>
+        </select>
+        <select id="weekday" hidden>
+          <option value="0">日</option><option value="1">月</option>
+          <option value="2">火</option><option value="3">水</option>
+          <option value="4">木</option><option value="5">金</option>
+          <option value="6">土</option>
+        </select>
+        <button type="submit">追加</button>
+      </div>
+    </form>
+  </div>
+
+  <h2>定例</h2>
+  <div class="card" id="defs"></div>
+</div>
+
+<div id="boot" class="err" hidden></div>
+<div id="msg"></div>
+
+<script>
+const $ = function(id){ return document.getElementById(id); };
+let idToken = null, state = null, busy = false;
+
+function toast(t){
+  const m = $('msg'); m.textContent = t; m.classList.add('on');
+  clearTimeout(m._t); m._t = setTimeout(function(){ m.classList.remove('on'); }, 1800);
+}
+
+async function api(action, payload){
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // preflight を避ける
+    body: JSON.stringify(Object.assign({ action: action, idToken: idToken }, payload || {}))
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'error');
+  return data;
+}
+
+const TYPE_LABEL = { once:'1回', daily:'毎日', weekday:'平日', weekly:'毎週', cal:'予定' };
+
+function render(){
+  $('date').textContent = state.label;
+
+  const items = state.items;
+  const done = items.filter(function(i){ return i.done; }).length;
+  $('sDone').textContent = done;
+  $('sAll').textContent = items.length;
+  $('sStreak').textContent = state.streak;
+  $('sWeek').textContent = state.week.done;
+  $('barfill').style.width = items.length ? (done / items.length * 100) + '%' : '0%';
+
+  const list = $('list');
+  list.innerHTML = '';
+  if (!items.length){
+    list.innerHTML = '<div class="empty">今日のタスクはありません</div>';
+  } else {
+    items.forEach(function(it){
+      const el = document.createElement('div');
+      el.className = 'item' + (it.done ? ' done' : '');
+      el.innerHTML =
+        '<span class="box"><svg viewBox="0 0 24 24"><polyline points="4,13 9,18 20,6"/></svg></span>' +
+        '<span class="t"></span>' +
+        (it.carried > 0 ? '<span class="carry">⤵' + (it.carried + 1) + '日目</span>' : '') +
+        '<span class="tag">' + (TYPE_LABEL[it.type] || it.type) + '</span>';
+      el.querySelector('.t').textContent = it.title;
+      el.onclick = function(){ toggle(it, el); };
+      list.appendChild(el);
+    });
+  }
+
+  // カレンダーの「見るだけ」の予定。タップできない
+  const infoBox = $('info'), infoH = $('hInfo');
+  const infoRows = [];
+  (state.info || []).forEach(function(t){ infoRows.push({ when:'今日', text:t }); });
+  (state.infoTomorrow || []).forEach(function(t){ infoRows.push({ when:'明日', text:t }); });
+  infoBox.hidden = infoH.hidden = !infoRows.length;
+  infoBox.innerHTML = '';
+  infoRows.forEach(function(r){
+    const el = document.createElement('div');
+    el.className = 'item plain';
+    el.innerHTML = '<span class="t"></span><span class="tag"></span>';
+    el.querySelector('.t').textContent = r.text;
+    el.querySelector('.tag').textContent = r.when;
+    infoBox.appendChild(el);
+  });
+
+  const defs = $('defs');
+  defs.innerHTML = '';
+  if (!state.defs.length){
+    defs.innerHTML = '<div class="empty">登録なし</div>';
+  } else {
+    state.defs.forEach(function(d){
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.style.cursor = 'default';
+      el.innerHTML =
+        '<span class="t"></span>' +
+        '<span class="tag">' + (TYPE_LABEL[d.type] || d.type) +
+        (d.type === 'weekly' ? '・' + '日月火水木金土'[Number(d.weekday)] : '') + '</span>' +
+        '<button class="del">削除</button>';
+      el.querySelector('.t').textContent = d.title;
+      el.querySelector('.del').onclick = function(){ remove(d); };
+      defs.appendChild(el);
+    });
+  }
+}
+
+async function toggle(it, el){
+  if (busy) return;
+  busy = true;
+  const next = !it.done;
+  it.done = next;
+  el.classList.toggle('done', next);            // 先に見た目を変える
+  const items = state.items;
+  const done = items.filter(function(i){ return i.done; }).length;
+  $('sDone').textContent = done;
+  $('barfill').style.width = (done / items.length * 100) + '%';
+  try {
+    await api('toggle', { taskId: it.taskId, done: next });
+  } catch (e) {
+    it.done = !next; el.classList.toggle('done', !next);
+    toast('保存できませんでした');
+  }
+  busy = false;
+}
+
+async function load(){
+  state = await api('today');
+  render();
+}
+
+async function remove(d){
+  if (busy) return;
+  busy = true;
+  try { await api('remove', { taskId: d.id }); await load(); toast('削除しました'); }
+  catch (e) { toast('削除できませんでした'); }
+  busy = false;
+}
+
+$('type').onchange = function(){
+  $('weekday').hidden = this.value !== 'weekly';
+};
+
+$('add').onsubmit = async function(ev){
+  ev.preventDefault();
+  const title = $('title').value.trim();
+  if (!title || busy) return;
+  busy = true;
+  const btn = this.querySelector('button');
+  btn.disabled = true;
+  try {
+    await api('add', { title: title, type: $('type').value, weekday: $('weekday').value });
+    $('title').value = '';
+    await load();
+    toast('追加しました');
+  } catch (e) { toast('追加できませんでした'); }
+  btn.disabled = false;
+  busy = false;
+};
+
+(async function(){
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    idToken = liff.getIDToken();
+    await load();
+    $('app').hidden = false;
+  } catch (e) {
+    const b = $('boot');
+    b.hidden = false;
+    b.textContent = '起動できませんでした：' + (e && e.message ? e.message : e);
+  }
+})();
+</script>
+</body>
+</html>
